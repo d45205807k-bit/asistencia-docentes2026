@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Trabajador {
+  id                String          @id @default(cuid())
+  dni               String          @unique
+  apellidosNombres  String
+  nivel             String
+  cargo             String
+  condicion         String          @default("")
+  horasSemanales    Int             @default(0)
+  activo            Boolean         @default(true)
+  horarios          Horario[]
+  marcaciones       Marcacion[]
+  justificaciones   Justificacion[]
+  creadoEn          DateTime        @default(now())
+  actualizadoEn     DateTime        @updatedAt
+
+  @@index([activo, apellidosNombres])
+}
+
+model Horario {
+  id             String     @id @default(cuid())
+  trabajadorId   String
+  diaSemana      Int
+  horaEntrada    String?
+  horaSalida     String?
+  toleranciaMin  Int        @default(10)
+  trabajador     Trabajador @relation(fields: [trabajadorId], references: [id], onDelete: Cascade)
+
+  @@unique([trabajadorId, diaSemana])
+}
+
+model Marcacion {
+  id                String     @id @default(cuid())
+  trabajadorId      String
+  fecha             String
+  tipo              String
+  horaMarcada       String
+  minutosTardanza   Int        @default(0)
+  estado            String
+  ip                String     @default("")
+  userAgent         String     @default("")
+  latitud           Float?
+  longitud          Float?
+  origen            String     @default("APP")
+  creadoEn          DateTime   @default(now())
+  trabajador        Trabajador @relation(fields: [trabajadorId], references: [id], onDelete: Cascade)
+
+  @@unique([trabajadorId, fecha, tipo])
+  @@index([fecha, trabajadorId])
+}
+
+model Feriado {
+  id          String   @id @default(cuid())
+  fecha       String   @unique
+  descripcion String
+}
+
+model Justificacion {
+  id             String     @id @default(cuid())
+  trabajadorId   String
+  fechaInicio    String
+  fechaFin       String
+  motivo         String
+  observacion    String     @default("")
+  trabajador     Trabajador @relation(fields: [trabajadorId], references: [id], onDelete: Cascade)
+
+  @@index([trabajadorId, fechaInicio, fechaFin])
+}
+
+model Configuracion {
+  clave String @id
+  valor String
+}
+
+model AuditLog {
+  id       String   @id @default(cuid())
+  accion   String
+  detalle  String
+  ip       String   @default("")
+  fecha    DateTime @default(now())
+
+  @@index([fecha])
+}
+
+model RequestRateLimit {
+  clave      String   @id
+  cantidad   Int      @default(0)
+  expiraEn   DateTime
+}
