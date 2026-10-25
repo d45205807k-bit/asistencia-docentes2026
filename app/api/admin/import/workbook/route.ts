@@ -37,7 +37,12 @@ export async function POST(request: Request) {
     }, { status: parsed.errors.length ? 422 : 200 });
   }
 
-  await applyWorkbookImport(parsed, request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "");
+  try {
+    await applyWorkbookImport(parsed, request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "");
+  } catch (error) {
+    console.error("No se pudo confirmar la importación del Excel.", error);
+    return NextResponse.json({ error: "No se pudo completar la importación. La base de datos no confirmó los cambios." }, { status: 500 });
+  }
   return NextResponse.json({
     importado: true,
     trabajadores: parsed.employees.length,

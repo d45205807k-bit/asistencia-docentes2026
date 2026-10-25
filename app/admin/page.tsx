@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { limaDateTime } from "@/lib/time";
 import LogoutButton from "@/components/LogoutButton";
+import AttendanceMarkTable from "@/components/AttendanceMarkTable";
 
 export const dynamic = "force-dynamic";
 
@@ -31,20 +32,22 @@ export default async function AdminPage() {
       <Metric label="Tardanzas" value={late} />
       <Metric label="Sin ingreso" value={missing} />
     </section>
+    <section className="card mb-6 p-5">
+      <h2 className="text-lg font-bold">Descargar por período</h2>
+      <form className="mt-4 flex flex-wrap items-end gap-3" action="/api/admin/reports/range" method="get">
+        <label className="text-sm font-medium">Desde<input className="field mt-1" type="date" name="from" defaultValue={fecha} required /></label>
+        <label className="text-sm font-medium">Hasta<input className="field mt-1" type="date" name="to" defaultValue={fecha} required /></label>
+        <label className="min-w-52 flex-1 text-sm font-medium">Trabajador<select className="field mt-1" name="workerId" defaultValue=""><option value="">Todo el personal activo</option>{workers.map((worker) => <option key={worker.id} value={worker.id}>{worker.apellidosNombres} · {worker.dni}</option>)}</select></label>
+        <button className="primary" type="submit">Descargar Excel</button>
+      </form>
+      <p className="mt-2 text-xs text-slate-500">Intervalo máximo: 92 días.</p>
+    </section>
     <section className="card overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b p-5">
         <div><h2 className="text-lg font-bold">Marcaciones registradas</h2><p className="text-sm text-slate-500">{marks.length} registros</p></div>
         <a className="primary inline-block text-center text-sm no-underline" href={`/api/admin/reports/daily?date=${fecha}`}>Descargar Excel diario</a>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[700px] text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-600"><tr><th className="p-3">Trabajador</th><th className="p-3">Nivel</th><th className="p-3">Tipo</th><th className="p-3">Hora</th><th className="p-3">Estado</th><th className="p-3">Minutos</th></tr></thead>
-          <tbody>{marks.map((mark) => <tr key={mark.id} className="border-t">
-            <td className="p-3 font-semibold">{mark.trabajador.apellidosNombres}</td><td className="p-3">{mark.trabajador.nivel}</td><td className="p-3">{mark.tipo}</td><td className="p-3">{mark.horaMarcada}</td><td className="p-3">{mark.estado.replaceAll("_", " ")}</td><td className="p-3">{mark.minutosTardanza}</td>
-          </tr>)}
-          {marks.length === 0 && <tr><td className="p-6 text-center text-slate-500" colSpan={6}>Todavía no hay marcaciones hoy.</td></tr>}</tbody>
-        </table>
-      </div>
+      <AttendanceMarkTable marks={marks} />
     </section>
     <div className="mt-6 flex flex-wrap gap-3">
       <a className="card px-4 py-3 text-sm font-semibold text-sky-900" href="/api/admin/reports/monthly">Descargar consolidado del mes</a>

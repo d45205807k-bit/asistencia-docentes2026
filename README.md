@@ -51,8 +51,8 @@ El script de terminal se ejecuta después de migrar la base y usa `DATABASE_URL`
 
 ## Reportes
 
-- Diario: Excel con horarios del día, entrada/salida, código de asistencia, minutos y observaciones.
-- Mensual: consolidado con códigos por día hábil, detalle de marcaciones, resumen por nivel y fórmulas de Excel para totales.
+- Diario y por período: Excel con una fila por marcación registrada, ordenada por fecha y hora; incluye día, trabajador, tipo, estado y minutos. Solo incluye personas que marcaron y resalta la primera marca de cada día.
+- Mensual: consolidado con códigos por día hábil, detalle cronológico de las marcaciones resaltado por día, resumen por nivel y fórmulas de Excel para totales.
 
 ## Desplegar en Vercel y Supabase
 
@@ -71,11 +71,11 @@ Para despliegues con varias instancias, el límite por minuto se guarda actualme
 
 ## Estado y supuestos
 
-- Implementado: marcación pública entrada/salida, cálculo de tardanza y salida anticipada, horarios por día, inicio de sesión admin con cookie firmada, dashboard, altas de personal, importación Excel institucional, feriados/justificaciones importados y reportes diario/mensual.
+- Implementado: marcación pública entrada/salida, cálculo de tardanza y salida anticipada, horarios por día, inicio de sesión admin con cookie firmada, dashboard con filtros en vivo, gestión e importación de personal, feriados/justificaciones importados y reportes diario/mensual y por período/trabajador.
 - El seed usa trabajadores ficticios y no copia datos personales del archivo de horarios.
 - Se considera que la asistencia está completa solo si existe entrada y salida; una marca incompleta se codifica como falta.
 - La importación detallada prioriza `Horario_Periodos` sobre los horarios uniformes de `Horarios`.
 
 ## Pendiente antes de uso operativo
 
-Antes de uso operativo, valide todos los horarios y datos importados y configure la contraseña, el radio y las coordenadas de la geovalla. La pantalla de personal permite altas y bajas lógicas; la edición de otros datos se realiza reimportando el Excel. El panel no incluye todavía filtros en vivo de la tabla, ni descarga por rango/por trabajador.
+Antes de uso operativo, valide todos los horarios y datos importados y configure la contraseña, el radio y las coordenadas de la geovalla. La descarga por período admite intervalos de hasta 92 días y un trabajador opcional. La pantalla de personal permite altas y bajas lógicas; para corregir otros datos, reimporte el Excel institucional.

@@ -56,5 +56,5 @@ export async function applyWorkbookImport(parsed: WorkbookImport, ip = "") {
         ip
       }
     });
-  });
+  }, { maxWait: 10_000, timeout: 60_000 });
 }

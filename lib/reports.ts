@@ -6,6 +6,16 @@ const navy = "17445F";
 const palette: Record<string, string> = {
   A: "D9EAD3", T: "FCE5CD", F: "F4CCCC", J: "CFE2F3", FER: "D9E1F2", "-": "F3F4F6"
 };
+const weekdayNames = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
+type AttendanceMarkRow = {
+  fecha: string;
+  tipo: string;
+  horaMarcada: string;
+  estado: string;
+  minutosTardanza: number;
+  trabajador: { dni: string; apellidosNombres: string; nivel: string };
+};
 
 function styleSheet(sheet: ExcelJS.Worksheet) {
   sheet.views = [{ state: "frozen", ySplit: 1 }];
@@ -21,6 +31,30 @@ function styleSheet(sheet: ExcelJS.Worksheet) {
   });
 }
 
+function highlightDayStart(row: ExcelJS.Row) {
+  row.eachCell({ includeEmpty: true }, (cell) => {
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE2F0E9" } };
+    cell.font = { ...cell.font, bold: true };
+    cell.border = { ...cell.border, top: { style: "medium", color: { argb: `FF${navy}` } } };
+  });
+}
+
+function addChronologicalMarks(sheet: ExcelJS.Worksheet, marks: AttendanceMarkRow[]) {
+  sheet.addRow(["Fecha", "Día", "DNI", "Apellidos y Nombres", "Nivel", "Tipo", "Hora", "Estado", "Minutos"]);
+  let previousDate = "";
+  for (const mark of marks) {
+    const weekday = new Date(`${mark.fecha}T12:00:00Z`).getUTCDay();
+    const row = sheet.addRow([
+      mark.fecha, weekdayNames[weekday], mark.trabajador.dni, mark.trabajador.apellidosNombres,
+      mark.trabajador.nivel, mark.tipo, mark.horaMarcada, mark.estado, mark.minutosTardanza
+    ]);
+    if (mark.fecha !== previousDate) highlightDayStart(row);
+    previousDate = mark.fecha;
+  }
+  styleSheet(sheet);
+  sheet.autoFilter = { from: "A1", to: `I${Math.max(1, sheet.rowCount)}` };
+}
+
 function dateRange(year: number, month: number) {
   const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
   return Array.from({ length: lastDay }, (_, index) => {
@@ -34,52 +68,27 @@ export async function dailyWorkbook(fecha: string, nivel?: string) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "I.E. Ricardo Palma";
   workbook.modified = new Date();
-  const sheet = workbook.addWorksheet("Asistencia diaria");
-  sheet.addRow(["N°", "DNI", "Apellidos y Nombres", "Nivel", "Cargo", "Horario", "Ingreso", "Salida", "Estado", "Minutos tardanza", "Observación"]);
-  const workers = await prisma.trabajador.findMany({
-    where: { activo: true, ...(nivel ? { nivel } : {}) },
-    include: { horarios: true, marcaciones: { where: { fecha } } },
-    orderBy: { apellidosNombres: "asc" }
+  const marks = await prisma.marcacion.findMany({
+    where: { fecha },
+    include: { trabajador: { select: { dni: true, apellidosNombres: true, nivel: true } } },
+    orderBy: [{ horaMarcada: "asc" }, { creadoEn: "asc" }]
   });
-  const weekday = new Date(`${fecha}T12:00:00Z`).getUTCDay() || 7;
-  const holiday = await prisma.feriado.findUnique({ where: { fecha } });
-  let rowNumber = 0;
-  for (const worker of workers) {
-    const schedule = worker.horarios.find((item) => item.diaSemana === weekday);
-    const entry = worker.marcaciones.find((mark) => mark.tipo === "ENTRADA");
-    const exit = worker.marcaciones.find((mark) => mark.tipo === "SALIDA");
-    const justified = await prisma.justificacion.findFirst({
-      where: { trabajadorId: worker.id, fechaInicio: { lte: fecha }, fechaFin: { gte: fecha } }
-    });
-    const code = attendanceCode({
-      isHoliday: Boolean(holiday), hasSchedule: Boolean(schedule?.horaEntrada && schedule.horaSalida),
-      justified: Boolean(justified), entryState: entry?.estado, hasEntry: Boolean(entry), hasExit: Boolean(exit)
-    });
-    rowNumber++;
-    const stateLabel = { A: "A", T: "T", F: "F", J: "J", FER: "FER", "-": "-" }[code];
-    sheet.addRow([
-      rowNumber, worker.dni, worker.apellidosNombres, worker.nivel, worker.cargo,
-      schedule?.horaEntrada && schedule.horaSalida ? `${schedule.horaEntrada} - ${schedule.horaSalida}` : "",
-      entry?.horaMarcada ?? "", exit?.horaMarcada ?? "", stateLabel,
-      entry?.minutosTardanza ?? 0, justified?.observacion ?? holiday?.descripcion ?? (code === "F" ? "Sin marcación completa" : "")
-    ]);
-  }
-  const dataEndRow = sheet.rowCount;
-  const totals = [
-    ["Asistencias", `COUNTIF(I2:I${dataEndRow},"A")+COUNTIF(I2:I${dataEndRow},"T")`],
-    ["Tardanzas", `COUNTIF(I2:I${dataEndRow},"T")`],
-    ["Faltas", `COUNTIF(I2:I${dataEndRow},"F")`],
-    ["Justificadas", `COUNTIF(I2:I${dataEndRow},"J")`],
-    ["Minutos totales de tardanza", `SUM(J2:J${dataEndRow})`]
-  ];
-  for (const [index, [label, formula]] of totals.entries()) {
-    const row = sheet.addRow([label, { formula }]);
-    row.getCell(1).font = { bold: true };
-    row.getCell(2).font = { bold: true };
-    if (index === 0) row.getCell(1).border = { top: { style: "thin" } };
-  }
-  styleSheet(sheet);
-  sheet.autoFilter = { from: "A1", to: `K${Math.max(1, dataEndRow)}` };
+  const filteredMarks = nivel ? marks.filter((mark) => mark.trabajador.nivel === nivel) : marks;
+  const sheet = workbook.addWorksheet("Marcaciones del día");
+  addChronologicalMarks(sheet, filteredMarks);
+  return workbook;
+}
+
+export async function rangeWorkbook(from: string, to: string, workerId?: string) {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "I.E. Ricardo Palma";
+  const marks = await prisma.marcacion.findMany({
+    where: { fecha: { gte: from, lte: to }, ...(workerId ? { trabajadorId: workerId } : {}) },
+    include: { trabajador: { select: { dni: true, apellidosNombres: true, nivel: true } } },
+    orderBy: [{ fecha: "asc" }, { horaMarcada: "asc" }, { creadoEn: "asc" }]
+  });
+  const sheet = workbook.addWorksheet("Marcaciones por período");
+  addChronologicalMarks(sheet, marks);
   return workbook;
 }
 
@@ -94,7 +103,10 @@ export async function monthlyWorkbook(year: number, month: number) {
   const dateStart = `${year}-${String(month).padStart(2, "0")}-01`;
   const dateEnd = `${year}-${String(month).padStart(2, "0")}-${String(days.length).padStart(2, "0")}`;
   const [marks, holidays, justifications] = await Promise.all([
-    prisma.marcacion.findMany({ where: { fecha: { gte: dateStart, lte: dateEnd } } }),
+    prisma.marcacion.findMany({
+      where: { fecha: { gte: dateStart, lte: dateEnd } },
+      include: { trabajador: { select: { dni: true, apellidosNombres: true, nivel: true } } }
+    }),
     prisma.feriado.findMany({ where: { fecha: { gte: dateStart, lte: dateEnd } } }),
     prisma.justificacion.findMany({ where: { fechaInicio: { lte: dateEnd }, fechaFin: { gte: dateStart } } })
   ]);
@@ -149,13 +161,8 @@ export async function monthlyWorkbook(year: number, month: number) {
   monthly.autoFilter = { from: "A1", to: `${monthly.getColumn(monthly.columnCount).letter}1` };
 
   const detail = workbook.addWorksheet("Detalle de marcaciones");
-  detail.addRow(["Fecha", "DNI", "Trabajador", "Nivel", "Tipo", "Hora", "Estado", "Minutos"]);
-  const workerMap = new Map(workers.map((worker) => [worker.id, worker]));
-  for (const mark of marks.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.horaMarcada.localeCompare(b.horaMarcada))) {
-    const worker = workerMap.get(mark.trabajadorId);
-    if (worker) detail.addRow([mark.fecha, worker.dni, worker.apellidosNombres, worker.nivel, mark.tipo, mark.horaMarcada, mark.estado, mark.minutosTardanza]);
-  }
-  styleSheet(detail);
+  const chronologicalMarks = [...marks].sort((a, b) => a.fecha.localeCompare(b.fecha) || a.horaMarcada.localeCompare(b.horaMarcada) || a.creadoEn.getTime() - b.creadoEn.getTime());
+  addChronologicalMarks(detail, chronologicalMarks);
 
   const summary = workbook.addWorksheet("Resumen por nivel");
   summary.addRow(["Nivel", "Total trabajadores", "Asistencias", "Tardanzas", "Faltas", "Justificadas"]);

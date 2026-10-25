@@ -19,7 +19,12 @@ export default function WorkbookImporter() {
       form.set("file", file);
       form.set("mode", mode);
       const response = await fetch("/api/admin/import/workbook", { method: "POST", body: form });
-      const body = await response.json();
+      let body;
+      try {
+        body = await response.json();
+      } catch {
+        throw new Error("El servidor no devolvió una respuesta válida. Intente nuevamente.");
+      }
       if (mode === "preview" && (response.ok || response.status === 422)) setPreview(body);
       if (!response.ok) throw new Error(body.errores?.join(" ") || body.error || "No se pudo procesar la importación.");
       if (mode === "commit") {
